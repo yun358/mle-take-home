@@ -106,7 +106,8 @@ just lint        # ruff
 Tests use a separate `companies_test` database in the same Postgres, so they never touch your data. They use a
 fast fake embedder; the tests of the real model run only once it has been downloaded (after `just consume`).
 
-With the API running, `just latency` measures response times over every active company.
+With the API running, `just latency` measures response times over every active company, and `just load-test`
+sends requests from 1 to 500 clients at once and reports throughput, latency and errors.
 
 ## Configuration
 
@@ -131,7 +132,7 @@ app/
   consumer.py    queue → clean → embed → store → ack
   api.py         the HTTP API
 tests/           cleaning, storage, consumer, API and model tests
-scripts/         latency measurement
+scripts/         latency measurement and load test
 producer/        the template's feed publisher (unchanged)
 data/feed.jsonl  the registry feed (unchanged)
 ```

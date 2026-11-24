@@ -39,6 +39,10 @@ test-fast:
 latency:
     uv run python -m scripts.measure_latency
 
+# Load test: 1 to 500 clients at once. Needs `just serve` running; takes a few minutes.
+load-test:
+    uv run python -m scripts.load_test
+
 # Lint and format check.
 lint:
     uv run ruff check .
