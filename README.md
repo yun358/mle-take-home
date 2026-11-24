@@ -79,6 +79,8 @@ To start again from an empty queue and database: `just down`, then `just up`.
 - `registrationNumber` is normalised the same way as the feed (`" syn-001550 "` works).
 - `limit`: how many companies to return, 1–20, default 4.
 - Results are the most similar first. Never the company itself, never struck-off companies.
+- Companies that are exactly as similar as each other (many share a description) are shuffled on every
+  request, so refreshing the page shows other equally good matches.
 - Each card has `registrationNumber`, `name`, `industry` and `state`; `industry` and `state` can be `null`.
 
 | Case | Status | Body |

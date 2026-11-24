@@ -16,7 +16,7 @@ from tests.helpers import load_feed
 
 CAFES = "Operating cafes and coffee shops"
 GLOVES = "Production of rubber gloves for export"
-DAY = "2026-11-25"
+SEED = "test-seed"
 
 
 @pytest.fixture(autouse=True)  # autouse: every test in this file gets it without asking
@@ -108,16 +108,17 @@ def test_company_without_embedding_gets_an_empty_list(connection, embedder):
     assert body["similar"] == []
 
 
-def test_tied_companies_rotate_daily_but_stay_put_within_a_day(connection, embedder):
+def test_tied_companies_reshuffle_with_a_new_seed_but_most_similar_stay_first(connection, embedder):
     for i in range(1, 12):  # 11 companies with the same description: 10 exact ties for SYN-000001
         add_company(connection, embedder, f"SYN-{i:06d}", CAFES)
+    add_company(connection, embedder, "SYN-000099", GLOVES)  # different description: farther than every tie
 
-    monday = [row["registration_number"] for row in db.find_similar(connection, "SYN-000001", 4, "2026-11-23")]
-    monday_again = [row["registration_number"] for row in db.find_similar(connection, "SYN-000001", 4, "2026-11-23")]
-    tuesday = [row["registration_number"] for row in db.find_similar(connection, "SYN-000001", 4, "2026-11-24")]
+    def top(seed: str, limit: int = 4) -> list[str]:
+        return [row["registration_number"] for row in db.find_similar(connection, "SYN-000001", limit, seed)]
 
-    assert monday == monday_again
-    assert monday != tuesday
+    assert top("a") == top("a")  # same seed, same order (so the query is testable)
+    assert top("a") != top("b")  # new seed, other tied companies
+    assert top("a", limit=11)[-1] == "SYN-000099"  # shuffling never lets a less similar company jump ahead
 
 
 # --- Errors ---
@@ -157,7 +158,7 @@ def test_every_active_company_gets_a_full_panel(connection, embedder):
 
     short_panels = []
     for (number,) in active:
-        similar = db.find_similar(connection, number, 4, DAY)
+        similar = db.find_similar(connection, number, 4, SEED)
         if len(similar) != 4 or any(row["name"] is None for row in similar):
             short_panels.append(number)
 

@@ -70,9 +70,9 @@ RETURNING registration_number
 # The most similar active companies, by cosine distance (<=>) between embeddings, smallest first.
 # The subquery fetches the company's own embedding once.
 # Ties: many companies share a description, so their distances are exactly equal. Breaking ties by a hash of
-# (this company, candidate, day) gives each company its own order of the tied candidates, the same all day and
-# different the next. Without it, every company in a tie group would show the same four, and the rest of the
-# group would never be recommended.
+# (this company, candidate, seed) shuffles the tied candidates: the API passes a new random seed on every
+# request, so a refresh shows other equally similar companies. Without it, every company in a tie group would
+# show the same four, and the rest of the group would never be recommended. The most similar still come first.
 # Never the company itself, never struck-off companies, never rows without a name or an embedding.
 SIMILAR_COMPANIES = """
 SELECT registration_number, name, industry, state
@@ -82,7 +82,7 @@ WHERE registration_number <> %(registration_number)s
   AND name IS NOT NULL
   AND embedding IS NOT NULL
 ORDER BY embedding <=> (SELECT embedding FROM companies WHERE registration_number = %(registration_number)s),
-         md5(%(registration_number)s || registration_number || %(day)s)
+         md5(%(registration_number)s || registration_number || %(seed)s)
 LIMIT %(limit)s
 """
 
@@ -164,11 +164,11 @@ def save_embedding(
     )
 
 
-def find_similar(connection: psycopg.Connection, registration_number: str, limit: int, day: str) -> list[dict]:
+def find_similar(connection: psycopg.Connection, registration_number: str, limit: int, seed: str) -> list[dict]:
     """The `limit` most similar active companies, most similar first, as dicts.
 
-    `day` (e.g. "2026-11-25") decides the order among exactly tied candidates.
+    `seed` (any text) decides the order among exactly tied candidates: same seed, same order.
     """
     cursor = connection.cursor(row_factory=dict_row)
-    parameters = {"registration_number": registration_number, "limit": limit, "day": day}
+    parameters = {"registration_number": registration_number, "limit": limit, "seed": seed}
     return cursor.execute(SIMILAR_COMPANIES, parameters).fetchall()
