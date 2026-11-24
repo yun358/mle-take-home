@@ -1,0 +1,24 @@
+name: Setup problem
+description: Something in the setup doesn't work, such as Docker, the services or the data.
+title: "Setup problem: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue is public. Don't include your solution, your name or any personal details. We can't help with
+        the task itself; to submit your work, use the submission form linked in the README.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The command you ran, and the full error output.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Your machine
+      placeholder: "macOS 15 on Apple silicon, Docker 28.3, uv 0.9, just 1.43"
+    validations:
+      required: true

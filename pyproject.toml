@@ -1,0 +1,11 @@
+[project]
+name = "company-recommendation-system"
+version = "0.0.0"
+description = "Turn a company event feed into a similar-companies service with RabbitMQ and pgvector."
+requires-python = ">=3.14,<3.15"
+dependencies = [
+  "aio-pika",
+]
+
+[tool.uv]
+package = false
