@@ -1,11 +1,9 @@
 """All SQL lives here: the schema, the newer-wins writes, and the similarity query."""
 
-from dataclasses import dataclass
-from datetime import datetime
-
 import numpy as np
 import psycopg
 from pgvector.psycopg import register_vector
+from psycopg.rows import dict_row
 
 from app.models import CompanyUpdate, Rejected, StrikeOff
 
@@ -70,19 +68,6 @@ RETURNING registration_number
 """
 
 
-@dataclass(frozen=True)
-class StoredCompany:
-    registration_number: str
-    name: str | None
-    nature_of_business: str | None
-    state: str | None
-    industry: str | None
-    updated_at: datetime | None
-    struck_off: bool
-    embedded_text: str | None
-    embedding_model: str | None
-
-
 def connect(url: str) -> psycopg.Connection:
     connection = psycopg.connect(url)
     create_schema(connection)
@@ -91,8 +76,8 @@ def connect(url: str) -> psycopg.Connection:
 
 
 def create_schema(connection: psycopg.Connection) -> None:
-    with connection.transaction():
-        connection.execute(SCHEMA)
+    connection.execute(SCHEMA)
+    connection.commit()
 
 
 def upsert_company(connection: psycopg.Connection, update: CompanyUpdate) -> bool:
@@ -123,12 +108,15 @@ def strike_off_company(connection: psycopg.Connection, strike_off: StrikeOff) ->
 def save_rejected(connection: psycopg.Connection, rejected: Rejected, message_id: str | None) -> None:
     connection.execute(
         "INSERT INTO rejected_messages (message_id, reason, body) VALUES (%s, %s, %s)",
-        (message_id, rejected.reason.value, rejected.body),
+        (message_id, rejected.reason, rejected.body),
     )
 
 
-def get_company(connection: psycopg.Connection, registration_number: str) -> StoredCompany | None:
-    row = connection.execute(
+def get_company(connection: psycopg.Connection, registration_number: str) -> dict | None:
+    """Return the stored company as a dict (column name -> value), or None if it isn't stored."""
+    # dict_row makes this one query return a dict instead of a tuple, so callers write company["name"].
+    cursor = connection.cursor(row_factory=dict_row)
+    return cursor.execute(
         """
         SELECT registration_number, name, nature_of_business, state, industry, updated_at, struck_off,
                embedded_text, embedding_model
@@ -136,7 +124,6 @@ def get_company(connection: psycopg.Connection, registration_number: str) -> Sto
         """,
         (registration_number,),
     ).fetchone()
-    return StoredCompany(*row) if row else None
 
 
 def save_embedding(

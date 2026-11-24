@@ -2,10 +2,18 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
+
+# Why a message was rejected. Stored as text in the rejected_messages table.
+INVALID_JSON = "invalid_json"
+NOT_AN_OBJECT = "not_an_object"
+MISSING_REGISTRATION_NUMBER = "missing_registration_number"
+REGISTRATION_NUMBER_NOT_TEXT = "registration_number_not_text"
+UNKNOWN_EVENT_TYPE = "unknown_event_type"
+DATA_IS_STRING = "data_is_string"
+DATA_NULL = "data_null"
 
 
-@dataclass(frozen=True)
+@dataclass
 class CompanyUpdate:
     """A `company-upserted` event. Any field except the registration number may be None (blank)."""
 
@@ -17,7 +25,7 @@ class CompanyUpdate:
     industry: str | None
 
 
-@dataclass(frozen=True)
+@dataclass
 class StrikeOff:
     """A `company-struck-off` event."""
 
@@ -25,22 +33,9 @@ class StrikeOff:
     updated_at: datetime | None
 
 
-class RejectReason(StrEnum):
-    INVALID_JSON = "invalid_json"
-    NOT_AN_OBJECT = "not_an_object"
-    MISSING_REGISTRATION_NUMBER = "missing_registration_number"
-    REGISTRATION_NUMBER_NOT_TEXT = "registration_number_not_text"
-    UNKNOWN_EVENT_TYPE = "unknown_event_type"
-    DATA_IS_STRING = "data_is_string"
-    DATA_NULL = "data_null"
-
-
-@dataclass(frozen=True)
+@dataclass
 class Rejected:
     """A message we can't use. It's stored with its reason, then acked."""
 
-    reason: RejectReason
+    reason: str  # one of the reasons at the top of this file
     body: str
-
-
-Message = CompanyUpdate | StrikeOff | Rejected

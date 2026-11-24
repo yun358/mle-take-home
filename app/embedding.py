@@ -1,23 +1,15 @@
 """Turning text into vectors.
 
-Everything that needs embeddings depends on the small `Embedder` interface, so tests can use a fast fake
-and the real model can be swapped without touching the rest of the code.
+Every embedder is a class with a `model_name` and an `embed(texts)` method that returns one vector per text.
+Tests use the fast fake below; the real model will be another class with the same two things, so the rest
+of the code doesn't change.
 """
 
 import hashlib
-from typing import Protocol
 
 import numpy as np
 
 from app.config import EMBEDDING_DIMENSIONS
-
-
-class Embedder(Protocol):
-    model_name: str
-
-    def embed(self, texts: list[str]) -> list[np.ndarray]:
-        """Return one unit-length vector per text."""
-        ...
 
 
 class FakeEmbedder:
@@ -29,6 +21,7 @@ class FakeEmbedder:
     model_name = "fake-hash-v1"
 
     def embed(self, texts: list[str]) -> list[np.ndarray]:
+        """Return one unit-length vector per text."""
         return [self._embed_one(text) for text in texts]
 
     def _embed_one(self, text: str) -> np.ndarray:

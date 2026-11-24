@@ -6,7 +6,18 @@ Everything here is a pure function: no database, no queue, no model. That makes 
 import json
 from datetime import UTC, datetime, timedelta, timezone
 
-from app.models import CompanyUpdate, Message, Rejected, RejectReason, StrikeOff
+from app.models import (
+    DATA_IS_STRING,
+    DATA_NULL,
+    INVALID_JSON,
+    MISSING_REGISTRATION_NUMBER,
+    NOT_AN_OBJECT,
+    REGISTRATION_NUMBER_NOT_TEXT,
+    UNKNOWN_EVENT_TYPE,
+    CompanyUpdate,
+    Rejected,
+    StrikeOff,
+)
 
 MALAYSIA = timezone(timedelta(hours=8))
 
@@ -61,26 +72,26 @@ def parse_updated_at(value: object) -> datetime | None:
     return None
 
 
-def parse_message(body: bytes | str) -> Message:
+def parse_message(body: bytes | str) -> CompanyUpdate | StrikeOff | Rejected:
     """Clean one message from the queue."""
     text = body.decode("utf-8", errors="replace") if isinstance(body, bytes) else body
 
     try:
         message = json.loads(text)
     except json.JSONDecodeError:
-        return Rejected(RejectReason.INVALID_JSON, text)
+        return Rejected(INVALID_JSON, text)
 
     if not isinstance(message, dict):
-        return Rejected(RejectReason.NOT_AN_OBJECT, text)
+        return Rejected(NOT_AN_OBJECT, text)
 
     raw_registration_number = message.get("registrationNumber")
     if raw_registration_number is None:
-        return Rejected(RejectReason.MISSING_REGISTRATION_NUMBER, text)
+        return Rejected(MISSING_REGISTRATION_NUMBER, text)
     if not isinstance(raw_registration_number, str):
-        return Rejected(RejectReason.REGISTRATION_NUMBER_NOT_TEXT, text)
+        return Rejected(REGISTRATION_NUMBER_NOT_TEXT, text)
     registration_number = normalise_registration_number(raw_registration_number)
     if not registration_number:
-        return Rejected(RejectReason.MISSING_REGISTRATION_NUMBER, text)
+        return Rejected(MISSING_REGISTRATION_NUMBER, text)
 
     updated_at = parse_updated_at(message.get("updatedAt"))
     event_type = message.get("type")
@@ -89,13 +100,13 @@ def parse_message(body: bytes | str) -> Message:
         return StrikeOff(registration_number, updated_at)
 
     if event_type != UPSERT:
-        return Rejected(RejectReason.UNKNOWN_EVENT_TYPE, text)
+        return Rejected(UNKNOWN_EVENT_TYPE, text)
 
     data = message.get("data")
     if isinstance(data, str):
-        return Rejected(RejectReason.DATA_IS_STRING, text)
+        return Rejected(DATA_IS_STRING, text)
     if not isinstance(data, dict):
-        return Rejected(RejectReason.DATA_NULL, text)
+        return Rejected(DATA_NULL, text)
 
     return CompanyUpdate(
         registration_number=registration_number,
