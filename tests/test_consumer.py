@@ -5,18 +5,14 @@ straight through process_message, which is what handle_message calls for every m
 """
 
 import asyncio
-import hashlib
 import json
-from pathlib import Path
 
 import psycopg
 import pytest
 
 from app import db
 from app.consumer import handle_message, process_message
-
-FEED = Path(__file__).parent.parent / "data" / "feed.jsonl"
-
+from tests.helpers import count, load_feed
 
 # A valid upsert, used by several tests.
 GOOD_MESSAGE = json.dumps(
@@ -54,17 +50,6 @@ class BrokenEmbedder:
 
     def embed(self, texts: list[str]) -> list:
         raise RuntimeError("model crashed")
-
-
-def load_feed(connection, embedder) -> None:
-    """Process every line of the feed, with the same message_id the producer gives it."""
-    for line in FEED.read_text(encoding="utf-8").splitlines():
-        message_id = hashlib.sha256(line.encode()).hexdigest()
-        process_message(connection, embedder, line, message_id)
-
-
-def count(connection, sql: str) -> int:
-    return connection.execute(sql).fetchone()[0]
 
 
 def all_companies(connection) -> list[tuple]:
