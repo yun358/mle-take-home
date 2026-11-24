@@ -1,11 +1,22 @@
-"""EmbedNStore: read company events from the queue, clean them, embed them, store them, then ack."""
+"""EmbedNStore: read company events from the queue, clean them, embed them, store them, then ack.
 
+Run it with `just consume`. Stop it with Ctrl+C: any message it was holding but hadn't acked goes back to the
+queue, so nothing is lost.
+"""
+
+import asyncio
+
+import aio_pika
 import psycopg
 
 from app import db
 from app.cleaning import embedding_text, parse_message
+from app.config import DATABASE_URL, QUEUE_NAME, RABBITMQ_URL
 from app.embedding import FakeEmbedder
 from app.models import Rejected, StrikeOff
+
+PREFETCH_COUNT = 32  # how many unacked messages RabbitMQ hands us at once
+RETRY_DELAY_SECONDS = 5  # wait before putting a failed message back, so a database outage isn't a tight loop
 
 
 def process_message(
@@ -58,3 +69,58 @@ def refresh_embedding(connection: psycopg.Connection, embedder: FakeEmbedder, re
     vector = embedder.embed([text])[0]
     db.save_embedding(connection, registration_number, text, source, embedder.model_name, vector)
     return True
+
+
+async def consume() -> None:
+    """Read messages from the queue forever, processing and acking them one at a time."""
+    connection = db.connect(DATABASE_URL)
+    embedder = FakeEmbedder()  # placeholder until the real model is added
+
+    # connect_robust reconnects by itself if RabbitMQ restarts.
+    rabbit = await aio_pika.connect_robust(RABBITMQ_URL)
+    async with rabbit:
+        channel = await rabbit.channel()
+        await channel.set_qos(prefetch_count=PREFETCH_COUNT)
+        # Exactly how the registry team declares it: durable, no extra arguments. Anything else is refused.
+        queue = await channel.declare_queue(QUEUE_NAME, durable=True)
+        print(f"waiting for messages on {QUEUE_NAME}", flush=True)
+
+        async with queue.iterator() as messages:
+            async for message in messages:
+                acked = await handle_message(connection, embedder, message)
+                if not acked and connection.broken:  # the database connection was lost: open a new one
+                    connection = db.connect(DATABASE_URL)
+
+
+async def handle_message(
+    connection: psycopg.Connection, embedder: FakeEmbedder, message, retry_delay: float = RETRY_DELAY_SECONDS
+) -> bool:
+    """Process one queue message, then ack it, or put it back on the queue if processing failed.
+
+    Returns True if the message was acked. `message` is an aio_pika message (tests pass a small fake).
+    """
+    try:
+        # This is ordinary (blocking) database code inside async code. That's fine for one consumer
+        # handling one message at a time.
+        result = process_message(connection, embedder, message.body, message.message_id)
+    except Exception as error:
+        # Not saved, so don't ack: put it back on the queue to be delivered again.
+        print(f"failed {message.message_id}: {error!r}", flush=True)
+        await asyncio.sleep(retry_delay)
+        await message.nack(requeue=True)
+        return False
+
+    await message.ack()  # only now, after process_message has committed
+    print(result, message.message_id, flush=True)  # flush: show it now, even in a log file
+    return True
+
+
+def main() -> None:
+    try:
+        asyncio.run(consume())
+    except KeyboardInterrupt:
+        print("stopped")
+
+
+if __name__ == "__main__":
+    main()

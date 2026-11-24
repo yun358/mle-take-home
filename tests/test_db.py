@@ -4,6 +4,7 @@ import json
 
 from app import db
 from app.consumer import process_message
+from app.embedding import FakeEmbedder
 
 
 def upsert_message(updated_at: str | None, data_changes: dict | None = None) -> str:
@@ -102,6 +103,15 @@ def test_company_without_description_gets_fallback_embedding(connection, embedde
 
     company = db.get_company(connection, "SYN-000675")
     assert company["embedded_text"] == "Pantas Logistik Sdn. Bhd.. Logistics"
+
+
+def test_new_model_reembeds_unchanged_text(connection, embedder):
+    process_message(connection, embedder, upsert_message(T1))
+
+    new_model = FakeEmbedder()
+    new_model.model_name = "fake-hash-v2"  # same text, different model
+    assert process_message(connection, new_model, upsert_message(T2)) == "updated_and_embedded"
+    assert db.get_company(connection, "SYN-000675")["embedding_model"] == "fake-hash-v2"
 
 
 # --- Missing timestamps ---

@@ -19,6 +19,10 @@ down:
 publish:
     uv run python -m producer.publish
 
+# Start the consumer: reads company-events and stores each company. Stop with Ctrl+C.
+consume:
+    uv run python -m app.consumer
+
 # Run the test suite (uses a separate companies_test database).
 test:
     uv run pytest -q
