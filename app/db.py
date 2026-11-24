@@ -68,8 +68,11 @@ RETURNING registration_number
 """
 
 # The most similar active companies, by cosine distance (<=>) between embeddings, smallest first.
-# The subquery fetches the company's own embedding once. Ties (identical descriptions give identical distances)
-# are broken by registration number, so the answer is always the same.
+# The subquery fetches the company's own embedding once.
+# Ties: many companies share a description, so their distances are exactly equal. Breaking ties by a hash of
+# (this company, candidate, day) gives each company its own order of the tied candidates, the same all day and
+# different the next. Without it, every company in a tie group would show the same four, and the rest of the
+# group would never be recommended.
 # Never the company itself, never struck-off companies, never rows without a name or an embedding.
 SIMILAR_COMPANIES = """
 SELECT registration_number, name, industry, state
@@ -79,7 +82,7 @@ WHERE registration_number <> %(registration_number)s
   AND name IS NOT NULL
   AND embedding IS NOT NULL
 ORDER BY embedding <=> (SELECT embedding FROM companies WHERE registration_number = %(registration_number)s),
-         registration_number
+         md5(%(registration_number)s || registration_number || %(day)s)
 LIMIT %(limit)s
 """
 
@@ -161,7 +164,11 @@ def save_embedding(
     )
 
 
-def find_similar(connection: psycopg.Connection, registration_number: str, limit: int) -> list[dict]:
-    """The `limit` most similar active companies, most similar first, as dicts."""
+def find_similar(connection: psycopg.Connection, registration_number: str, limit: int, day: str) -> list[dict]:
+    """The `limit` most similar active companies, most similar first, as dicts.
+
+    `day` (e.g. "2026-11-25") decides the order among exactly tied candidates.
+    """
     cursor = connection.cursor(row_factory=dict_row)
-    return cursor.execute(SIMILAR_COMPANIES, {"registration_number": registration_number, "limit": limit}).fetchall()
+    parameters = {"registration_number": registration_number, "limit": limit, "day": day}
+    return cursor.execute(SIMILAR_COMPANIES, parameters).fetchall()

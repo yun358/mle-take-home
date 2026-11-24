@@ -5,13 +5,14 @@ Run it with `just serve`, then open http://localhost:8000/companies/SYN-001550/s
 """
 
 import re
+from datetime import datetime
 
 import psycopg
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 
 from app import db
-from app.cleaning import normalise_registration_number
+from app.cleaning import MALAYSIA, normalise_registration_number
 from app.config import DATABASE_URL
 
 # What a registration number looks like after normalising, e.g. SYN-001550.
@@ -44,7 +45,8 @@ def similar_companies(registration_number: str, limit: int = Query(default=4, ge
             if company["embedded_text"] is None:  # e.g. a strike-off seen before the company itself
                 similar = []
             else:
-                similar = db.find_similar(connection, registration_number, limit)
+                today = datetime.now(MALAYSIA).date().isoformat()  # tied companies rotate daily
+                similar = db.find_similar(connection, registration_number, limit, today)
     except psycopg.OperationalError:  # the database is down or unreachable
         return error(503, "service_unavailable")
 
