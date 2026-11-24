@@ -3,7 +3,7 @@ set dotenv-load := true
 
 default: setup
 
-# Install the producer's dependencies.
+# Install all Python dependencies.
 setup:
     uv sync --locked
 
@@ -27,9 +27,17 @@ consume:
 serve:
     uv run uvicorn app.api:app --port 8000
 
-# Run the test suite (uses a separate companies_test database).
+# Run the test suite (uses a separate companies_test database; about 2 minutes).
 test:
     uv run pytest -q
+
+# Run only the fast tests (cleaning and storage rules; a few seconds).
+test-fast:
+    uv run pytest -q tests/test_cleaning.py tests/test_db.py
+
+# Measure API latency over every active company. Needs `just serve` running.
+latency:
+    uv run python -m scripts.measure_latency
 
 # Lint and format check.
 lint:

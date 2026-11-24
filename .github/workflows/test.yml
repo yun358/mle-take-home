@@ -1,0 +1,46 @@
+# Runs lint and the test suite on every push and pull request. Results show in the repo's Actions tab.
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # A throwaway Postgres with pgvector, the same image as docker-compose.yml, for the tests to use.
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: companies
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d companies"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+
+    env:
+      POSTGRES_PORT: "5432"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      # The real-model tests are skipped here: the model isn't downloaded in CI.
+      - name: Test
+        run: uv run pytest -q
