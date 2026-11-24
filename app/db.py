@@ -30,7 +30,7 @@ CREATE INDEX IF NOT EXISTS companies_embedding_hnsw
 
 CREATE TABLE IF NOT EXISTS rejected_messages (
     id          bigserial PRIMARY KEY,
-    message_id  text,
+    message_id  text UNIQUE,        -- a replayed or redelivered bad message is stored once
     reason      text NOT NULL,
     body        text NOT NULL,
     received_at timestamptz NOT NULL DEFAULT now()
@@ -107,7 +107,8 @@ def strike_off_company(connection: psycopg.Connection, strike_off: StrikeOff) ->
 
 def save_rejected(connection: psycopg.Connection, rejected: Rejected, message_id: str | None) -> None:
     connection.execute(
-        "INSERT INTO rejected_messages (message_id, reason, body) VALUES (%s, %s, %s)",
+        "INSERT INTO rejected_messages (message_id, reason, body) VALUES (%s, %s, %s) "
+        "ON CONFLICT (message_id) DO NOTHING",
         (message_id, rejected.reason, rejected.body),
     )
 
