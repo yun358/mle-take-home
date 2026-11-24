@@ -67,6 +67,22 @@ WHERE companies.updated_at IS NULL OR excluded.updated_at > companies.updated_at
 RETURNING registration_number
 """
 
+# The most similar active companies, by cosine distance (<=>) between embeddings, smallest first.
+# The subquery fetches the company's own embedding once. Ties (identical descriptions give identical distances)
+# are broken by registration number, so the answer is always the same.
+# Never the company itself, never struck-off companies, never rows without a name or an embedding.
+SIMILAR_COMPANIES = """
+SELECT registration_number, name, industry, state
+FROM companies
+WHERE registration_number <> %(registration_number)s
+  AND NOT struck_off
+  AND name IS NOT NULL
+  AND embedding IS NOT NULL
+ORDER BY embedding <=> (SELECT embedding FROM companies WHERE registration_number = %(registration_number)s),
+         registration_number
+LIMIT %(limit)s
+"""
+
 
 def connect(url: str) -> psycopg.Connection:
     connection = psycopg.connect(url)
@@ -143,3 +159,9 @@ def save_embedding(
         """,
         (text, source, model_name, embedding, registration_number),
     )
+
+
+def find_similar(connection: psycopg.Connection, registration_number: str, limit: int) -> list[dict]:
+    """The `limit` most similar active companies, most similar first, as dicts."""
+    cursor = connection.cursor(row_factory=dict_row)
+    return cursor.execute(SIMILAR_COMPANIES, {"registration_number": registration_number, "limit": limit}).fetchall()

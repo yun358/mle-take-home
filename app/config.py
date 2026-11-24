@@ -4,6 +4,7 @@ The defaults match the template's docker-compose.yml, including its POSTGRES_POR
 """
 
 import os
+from pathlib import Path
 
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT", "5432")
 RABBITMQ_PORT = os.environ.get("RABBITMQ_PORT", "5672")
@@ -13,3 +14,8 @@ RABBITMQ_URL = os.environ.get("RABBITMQ_URL", f"amqp://guest:guest@localhost:{RA
 
 QUEUE_NAME = "company-events"
 EMBEDDING_DIMENSIONS = 384
+
+# "minilm" (the real model) or "fake" (fast, meaningless vectors, for quick experiments).
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "minilm")
+# Where the model files are downloaded on first use. The folder is git-ignored.
+MODEL_DIR = Path(os.environ.get("MODEL_DIR", Path(__file__).parent.parent / ".models"))

@@ -12,7 +12,7 @@ import psycopg
 from app import db
 from app.cleaning import embedding_text, parse_message
 from app.config import DATABASE_URL, QUEUE_NAME, RABBITMQ_URL
-from app.embedding import FakeEmbedder
+from app.embedding import FakeEmbedder, MiniLMEmbedder, make_embedder
 from app.models import Rejected, StrikeOff
 
 PREFETCH_COUNT = 32  # how many unacked messages RabbitMQ hands us at once
@@ -20,7 +20,10 @@ RETRY_DELAY_SECONDS = 5  # wait before putting a failed message back, so a datab
 
 
 def process_message(
-    connection: psycopg.Connection, embedder: FakeEmbedder, body: bytes | str, message_id: str | None = None
+    connection: psycopg.Connection,
+    embedder: FakeEmbedder | MiniLMEmbedder,
+    body: bytes | str,
+    message_id: str | None = None,
 ) -> str:
     """Clean and store one message, then commit. Returns what happened, for logging.
 
@@ -52,7 +55,9 @@ def process_message(
     return result
 
 
-def refresh_embedding(connection: psycopg.Connection, embedder: FakeEmbedder, registration_number: str) -> bool:
+def refresh_embedding(
+    connection: psycopg.Connection, embedder: FakeEmbedder | MiniLMEmbedder, registration_number: str
+) -> bool:
     """Re-embed only if the text to embed (or the model) changed: embedding is the expensive step."""
     # Read the row back instead of using the message: after the upsert, the row holds the merged data
     # (blank fields in the message kept their stored values), and that's what we want to embed.
@@ -74,7 +79,8 @@ def refresh_embedding(connection: psycopg.Connection, embedder: FakeEmbedder, re
 async def consume() -> None:
     """Read messages from the queue forever, processing and acking them one at a time."""
     connection = db.connect(DATABASE_URL)
-    embedder = FakeEmbedder()  # placeholder until the real model is added
+    embedder = make_embedder()  # the real model, unless EMBEDDING_MODEL=fake
+    print(f"embedding with {embedder.model_name}", flush=True)
 
     # connect_robust reconnects by itself if RabbitMQ restarts.
     rabbit = await aio_pika.connect_robust(RABBITMQ_URL)
@@ -93,7 +99,10 @@ async def consume() -> None:
 
 
 async def handle_message(
-    connection: psycopg.Connection, embedder: FakeEmbedder, message, retry_delay: float = RETRY_DELAY_SECONDS
+    connection: psycopg.Connection,
+    embedder: FakeEmbedder | MiniLMEmbedder,
+    message,
+    retry_delay: float = RETRY_DELAY_SECONDS,
 ) -> bool:
     """Process one queue message, then ack it, or put it back on the queue if processing failed.
 

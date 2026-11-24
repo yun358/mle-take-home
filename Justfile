@@ -23,6 +23,10 @@ publish:
 consume:
     uv run python -m app.consumer
 
+# Start the API on http://localhost:8000 (docs at /docs). Stop with Ctrl+C.
+serve:
+    uv run uvicorn app.api:app --port 8000
+
 # Run the test suite (uses a separate companies_test database).
 test:
     uv run pytest -q
